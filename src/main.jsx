@@ -131,41 +131,75 @@ function TodayUsage({ value, day }) {
     </div>
   );
 }
-function DeepseekStatus({ account, onDetails }) {
+const defaultOverviewModel = "deepseek-v4.1-flash";
+function modelLabel(model) {
+  return (
+    {
+      "deepseek-v4.1-flash": "DeepSeek 4.1 Flash",
+      "deepseek-v4-pro": "DeepSeek 4 Pro",
+    }[model?.id] ||
+    model?.name ||
+    model?.id ||
+    "模型"
+  );
+}
+function AccountModelStatus({ account, modelId, job, batch, onDetails }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15000);
     return () => clearInterval(timer);
   }, []);
-  const model = account.models?.find((m) => m.id === "deepseek-v4.1-flash");
+  const model = account.models?.find((m) => m.id === modelId);
   const event = model?.event;
+  const testing =
+    job?.running &&
+    job.active?.some(
+      (item) => item.uid === account.uid && item.model === modelId,
+    );
+  const queued =
+    job?.running &&
+    batch?.startedAt === job.startedAt &&
+    batch.model === modelId &&
+    batch.uids.includes(account.uid) &&
+    !(event?.at >= job.startedAt);
   const limited = event?.status === 429;
   const reset = limited && event.resetAt ? event.resetAt : null;
   const waiting = reset > now;
   const success = event?.status >= 200 && event.status < 300;
-  const status = limited
-    ? reset && !waiting
-      ? "已到恢复时间"
-      : "限流中"
-    : success
-      ? "最近测试成功"
-      : event
-        ? "最近测试失败"
-        : "尚未测试";
+  const status = testing
+    ? "测试中…"
+    : queued
+      ? "等待测试"
+      : !model
+        ? "未提供此模型"
+        : !model.canTest && !event
+          ? "无法测试"
+          : limited
+            ? reset && !waiting
+              ? "已到恢复时间"
+              : "限流中"
+            : success
+              ? "最近测试成功"
+              : event
+                ? "最近测试失败"
+                : "尚未测试";
   const minutes = waiting ? Math.ceil((reset - now) / 60000) : 0;
   return (
     <div
-      className="account-deepseek"
+      className="account-model-status"
       data-account={account.uid}
-      aria-label={`${account.name} 的 DeepSeek 4.1 状态`}
+      data-model={modelId}
+      aria-label={`${account.name} 的 ${modelLabel(model || { id: modelId })} 状态`}
+      aria-live="polite"
       title={
         event?.at ? `记录于 ${date(event.at, true)}（北京时间）` : undefined
       }
     >
-      <div className="deepseek-heading">
+      <div className="account-model-heading">
         <span
-          className={`badge${limited ? " amber" : event && !success ? " red" : !event ? " neutral" : ""}`}
+          className={`badge${testing || queued || !model ? " neutral" : limited ? " amber" : event && !success ? " red" : !event ? " neutral" : ""}`}
         >
+          {testing && <Spinner size="extra-tiny" />}
           {status}
         </span>
         <Button
@@ -177,14 +211,20 @@ function DeepseekStatus({ account, onDetails }) {
           onClick={onDetails}
         />
       </div>
-      {reset ? (
+      {testing || queued ? (
+        <span className="muted">
+          {testing ? "正在等待官方返回" : "将按顺序测试一次"}
+        </span>
+      ) : !model ? (
+        <span className="muted">此账号不参与本次测试</span>
+      ) : reset ? (
         <>
-          <span className="deepseek-deadline">
+          <span className="account-model-deadline">
             <time dateTime={new Date(reset).toISOString()}>
               {date(reset, true)}
             </time>
           </span>
-          <span className="deepseek-remaining">
+          <span className="account-model-remaining">
             {waiting
               ? `剩余 ${minutes >= 60 ? Math.floor(minutes / 60) + " 小时 " : ""}${minutes % 60} 分钟`
               : "请手动测试确认"}
@@ -196,7 +236,9 @@ function DeepseekStatus({ account, onDetails }) {
             ? "官方尚未提供解锁时间"
             : event?.at
               ? `${date(event.at)} 测试`
-              : "解锁时间待测试确认"}
+              : !model.canTest
+                ? "缺少登录或官方模型目录"
+                : "解锁时间待测试确认"}
         </span>
       )}
     </div>
@@ -234,6 +276,17 @@ function App() {
   const [dragging, setDragging] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const [orderMessage, setOrderMessage] = useState("");
+  const [overviewModel, setOverviewModel] = useState(() => {
+    try {
+      return localStorage.getItem("overview-model") || defaultOverviewModel;
+    } catch {
+      return defaultOverviewModel;
+    }
+  });
+  const [overviewStarting, setOverviewStarting] = useState(false);
+  const overviewRequest = useRef(false);
+  const [overviewBatch, setOverviewBatch] = useState(null);
+  const [modelFocus, setModelFocus] = useState("");
   const [page, setPage] = useState("overview"),
     [filter, setFilter] = useState("all"),
     [busy, setBusy] = useState(""),
@@ -344,6 +397,64 @@ function App() {
   const accounts = data.accounts,
     selected = accounts.filter((a) => filter === "all" || a.uid === filter),
     title = pages.find((p) => p[0] === page)[1];
+  const overviewChoices = [
+    ...new Map(
+      accounts.flatMap((a) => (a.models || []).map((m) => [m.id, m])),
+    ).values(),
+  ].sort(
+    (a, b) =>
+      Number(b.id === defaultOverviewModel) -
+        Number(a.id === defaultOverviewModel) || a.id.localeCompare(b.id),
+  );
+  const overviewModelId = overviewChoices.some((m) => m.id === overviewModel)
+    ? overviewModel
+    : overviewChoices[0]?.id || defaultOverviewModel;
+  const overviewRunning = overviewStarting || data.modelTests?.running;
+  const canTestOverview = (id) =>
+    accounts.some((a) => a.models?.some((m) => m.id === id && m.canTest));
+  async function testOverviewModel(id = overviewModelId) {
+    if (overviewRequest.current || overviewRunning || busy) return;
+    const items = accounts
+      .filter((a) => a.models?.some((m) => m.id === id && m.canTest))
+      .map((a) => ({ uid: a.uid, model: id }));
+    if (!items.length) return;
+    overviewRequest.current = true;
+    setOverviewStarting(true);
+    try {
+      const job = await api.startModelTests(items);
+      setOverviewBatch({
+        startedAt: job.startedAt,
+        model: id,
+        uids: items.map((m) => m.uid),
+      });
+    } catch (e) {
+      tell(e.message, true);
+    } finally {
+      overviewRequest.current = false;
+      setOverviewStarting(false);
+    }
+  }
+  function chooseOverviewModel(id) {
+    if (
+      id === overviewModelId ||
+      overviewRunning ||
+      busy ||
+      !canTestOverview(id)
+    )
+      return;
+    setOverviewModel(id);
+    try {
+      localStorage.setItem("overview-model", id);
+    } catch {}
+    testOverviewModel(id);
+  }
+  async function stopOverviewTest() {
+    try {
+      await api.cancelModelTests();
+    } catch (e) {
+      tell(e.message, true);
+    }
+  }
   async function reorder(uids) {
     if (busy || uids.every((uid, index) => uid === accounts[index]?.uid))
       return;
@@ -470,7 +581,10 @@ function App() {
                 key={id}
                 className={`nav-item ${page === id ? "active" : ""} ${id === "settings" ? "settings-nav" : ""}`}
                 aria-current={page === id ? "page" : undefined}
-                onClick={() => setPage(id)}
+                onClick={() => {
+                  setModelFocus("");
+                  setPage(id);
+                }}
               >
                 <Icon size={20} weight={page === id ? "fill" : "regular"} />
                 {label}
@@ -593,11 +707,71 @@ function App() {
                     </div>
                     <section className="account-list" aria-label="本机账号列表">
                       {accounts.length > 0 && (
-                        <div className="account-columns" aria-hidden="true">
+                        <div className="account-columns">
                           <span>账号</span>
                           <span>剩余积分</span>
                           <span>今日已用</span>
-                          <span>DeepSeek 4.1 · 解锁时间</span>
+                          <div className="overview-model-controls">
+                            <Select
+                              size="small"
+                              className="overview-model-select"
+                              aria-label="主页状态模型"
+                              value={overviewModelId}
+                              disabled={
+                                !!busy ||
+                                !!overviewRunning ||
+                                !overviewChoices.length
+                              }
+                              title={`${modelLabel({ id: overviewModelId })}：选择新模型后，各账号立即测试一次；测试可能消耗积分。`}
+                              onChange={(e) =>
+                                chooseOverviewModel(e.target.value)
+                              }
+                            >
+                              {overviewChoices.length ? (
+                                overviewChoices.map((m) => (
+                                  <option
+                                    key={m.id}
+                                    value={m.id}
+                                    disabled={!canTestOverview(m.id)}
+                                  >
+                                    {modelLabel(m)}
+                                  </option>
+                                ))
+                              ) : (
+                                <option value={overviewModelId}>
+                                  等待模型目录
+                                </option>
+                              )}
+                            </Select>
+                            <Button
+                              size="small"
+                              className="overview-test-button"
+                              disabled={
+                                !!busy ||
+                                overviewStarting ||
+                                (data.modelTests?.running
+                                  ? data.modelTests.canceled
+                                  : !canTestOverview(overviewModelId))
+                              }
+                              aria-label={
+                                overviewRunning
+                                  ? "停止主页模型测试"
+                                  : "测试所选模型"
+                              }
+                              title={
+                                overviewRunning
+                                  ? `已完成 ${data.modelTests?.completed || 0} / ${data.modelTests?.total || 0}，点击停止`
+                                  : "全部可测试账号各测一次，可能消耗积分"
+                              }
+                              onClick={() =>
+                                data.modelTests?.running
+                                  ? stopOverviewTest()
+                                  : testOverviewModel()
+                              }
+                            >
+                              {overviewRunning ? "停止" : "测试"}
+                            </Button>
+                          </div>
                           <span>切换客户端</span>
                         </div>
                       )}
@@ -722,10 +896,14 @@ function App() {
                                   </strong>
                                 </div>
                                 <TodayUsage value={a.todayUsage} day={today} />
-                                <DeepseekStatus
+                                <AccountModelStatus
                                   account={a}
+                                  modelId={overviewModelId}
+                                  job={data.modelTests}
+                                  batch={overviewBatch}
                                   onDetails={() => {
                                     setFilter(a.uid);
+                                    setModelFocus(overviewModelId);
                                     setPage("models");
                                   }}
                                 />
@@ -863,6 +1041,7 @@ function App() {
                     allAccounts={accounts}
                     showAllAccounts={() => setFilter("all")}
                     job={data.modelTests}
+                    initialSearch={modelFocus}
                   />
                 )}
                 {page === "rewards" && (
@@ -1040,7 +1219,7 @@ function App() {
                       <h2>数据与说明</h2>
                       <p>
                         每 3
-                        分钟查询一次官方余额与模型目录。签到和模型测试需要手动点击。
+                        分钟查询一次官方余额与模型目录。主动更换主页模型或点击测试才请求模型；签到需手动点击。
                       </p>
                       <Button
                         disabled={!!busy}
@@ -1491,8 +1670,14 @@ function Packages({ accounts }) {
     </>
   );
 }
-function Models({ accounts, allAccounts = accounts, showAllAccounts, job }) {
-  const [search, setSearch] = useState("");
+function Models({
+  accounts,
+  allAccounts = accounts,
+  showAllAccounts,
+  job,
+  initialSearch = "",
+}) {
+  const [search, setSearch] = useState(initialSearch);
   const [view, setView] = useState("all"),
     [now, setNow] = useState(Date.now()),
     [requesting, setRequesting] = useState(false),
@@ -1583,7 +1768,7 @@ function Models({ accounts, allAccounts = accounts, showAllAccounts, job }) {
     <>
       <Note>
         DeepSeek 4.1
-        优先显示。点击「测试」才会实际调用模型并取得返回；遇到限流时显示官方提供的解锁时间。测试可能消耗积分，打开页面和刷新数据不会自动测试。
+        优先显示。主动更换主页模型或点击「测试」会调用模型并取得返回；遇到限流时显示官方提供的解锁时间。测试可能消耗积分，打开页面和刷新数据不会自动测试。
       </Note>
       <div className="section-heading">
         <h2>

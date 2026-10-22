@@ -14,7 +14,10 @@ profiles, synthetic credentials and fixture databases. Preserve conversations,
 editor state, deletion flags and unrelated storage on switches and rollbacks.
 
 Do not add external model gateways or forward credentials to third-party
-services. Model tests use the official service only, after a manual click.
+services. Model tests use the official service only, after an explicit test
+click or a user changing the overview model selection. Changing that selection
+tests each eligible account once; loading, refreshing and restoring a saved
+selection must never trigger inference.
 Keep credentials in the main process and private export files, never renderer
 state, logs or screenshots. Never log secret values during validation.
 

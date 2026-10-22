@@ -270,12 +270,37 @@ main {
   font-size: 11px;
   color: #617168;
 }
-.account-columns span:nth-child(2),
-.account-columns span:nth-child(3) {
+.account-columns > span:nth-child(2),
+.account-columns > span:nth-child(3) {
   text-align: right;
 }
-.account-columns span:first-child {
+.account-columns > span:first-child {
   padding-left: 28px;
+}
+.overview-model-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.overview-model-select {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: #fff;
+}
+.overview-model-select select {
+  min-width: 0;
+  width: 100%;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: #344d3e;
+}
+.overview-model-controls .overview-test-button {
+  flex-shrink: 0;
+  min-width: 40px;
+  padding-inline: 8px;
+  font-size: 12px;
 }
 .account-row {
   padding: 14px 16px;
@@ -376,7 +401,7 @@ main {
   font-size: 10px;
   margin-top: 3px;
 }
-.account-deepseek {
+.account-model-status {
   display: grid;
   align-content: center;
   gap: 3px;
@@ -385,30 +410,34 @@ main {
   line-height: 1.5;
   padding-left: 10px;
 }
-.deepseek-heading {
+.account-model-heading {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.deepseek-heading button {
+.account-model-heading button {
   min-width: 24px;
   min-height: 22px;
   padding: 0;
   color: #64796c;
 }
-.deepseek-deadline {
+.account-model-deadline {
   color: #344d3e;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.deepseek-remaining {
+.account-model-remaining {
   color: #6b786f;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-.account-deepseek .muted {
+.account-model-status .muted {
   font-size: 11px;
+}
+.account-model-status .badge {
+  align-items: center;
+  gap: 5px;
 }
 .badge {
   display: inline-flex;
@@ -766,7 +795,7 @@ footer span {
   .account-amount strong {
     font-size: 17px;
   }
-  .account-deepseek {
+  .account-model-status {
     padding-left: 6px;
   }
   .account-name .caption {

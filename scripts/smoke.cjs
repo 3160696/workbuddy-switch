@@ -35,6 +35,11 @@ const fs = require("node:fs"),
     );
     assert.equal(await page.getByText("今日已用", { exact: true }).count(), 1);
     const demoState = await page.evaluate(() => window.hub.load());
+    assert.equal(
+      demoState.modelTests,
+      null,
+      "Opening the overview must not test models",
+    );
     const accountIds = () =>
       page
         .locator(".account-row")
@@ -114,12 +119,12 @@ const fs = require("node:fs"),
     await firstDaily.getByText("等待查询", { exact: true }).waitFor();
     assert.equal(await firstDaily.locator("strong").innerText(), "—");
     await publishDaily(daily);
-    assert.equal(await page.locator(".account-deepseek").count(), 3);
+    assert.equal(await page.locator(".account-model-status").count(), 3);
     assert.deepEqual(
-      await page.locator(".account-deepseek .badge").allTextContents(),
+      await page.locator(".account-model-status .badge").allTextContents(),
       ["尚未测试", "限流中", "尚未测试"],
     );
-    const firstDeepseek = page.locator(".account-deepseek").first();
+    const firstDeepseek = page.locator(".account-model-status").first();
     const publishDeepseek = async (event) => {
       const state = structuredClone(demoState);
       state.accounts[0].models.find(
@@ -160,7 +165,7 @@ const fs = require("node:fs"),
     await publishDeepseek(null);
     await firstDeepseek.getByText("尚未测试", { exact: true }).waitFor();
     await page
-      .locator('.account-deepseek[data-account="demo-account-1"]')
+      .locator('.account-model-status[data-account="demo-account-1"]')
       .getByRole("button", { name: "查看 / 测试", exact: true })
       .click();
     await page
@@ -466,6 +471,104 @@ const fs = require("node:fs"),
       });
     }
     await page.getByRole("button", { name: "账号总览", exact: true }).click();
+    // The overview selector is an explicit, single batch action. Refreshing,
+    // navigating, loading a saved selection and selecting the same value do not
+    // start another inference job. All work here uses DemoBackend only.
+    const selector = page.getByRole("combobox", { name: "主页状态模型" });
+    const overviewJob = () =>
+      page.evaluate(() => window.hub.load().then((s) => s.modelTests));
+    const finishOverview = () =>
+      page.waitForFunction(() => {
+        const button = document.querySelector(".overview-test-button");
+        return (
+          button?.getAttribute("aria-label") === "测试所选模型" &&
+          !button.disabled
+        );
+      });
+    const beforeOverview = await page.evaluate(() => window.hub.load());
+    await selector.selectOption("glm-5.3");
+    assert.equal(
+      await selector.isEnabled(),
+      false,
+      "Do not overlap model selections during a batch",
+    );
+    await finishOverview();
+    const afterSelection = await page.evaluate(() => window.hub.load());
+    assert.equal(afterSelection.modelTests.total, 3);
+    assert.equal(afterSelection.modelTests.completed, 3);
+    for (const account of afterSelection.accounts) {
+      assert.ok(
+        account.models.find((m) => m.id === "glm-5.3").event.at >=
+          afterSelection.modelTests.startedAt,
+      );
+      for (const model of account.models.filter((m) => m.id !== "glm-5.3"))
+        assert.deepEqual(
+          model.event,
+          beforeOverview.accounts
+            .find((a) => a.uid === account.uid)
+            .models.find((m) => m.id === model.id).event,
+        );
+    }
+    assert.deepEqual(
+      await page
+        .locator(".account-model-status")
+        .evaluateAll((rows) => rows.map((r) => r.dataset.model)),
+      Array(3).fill("glm-5.3"),
+    );
+    const selectionJob = afterSelection.modelTests.startedAt;
+    await page.getByRole("button", { name: "刷新数据", exact: true }).click();
+    await selector.selectOption("glm-5.3");
+    assert.equal((await overviewJob()).startedAt, selectionJob);
+    await page
+      .locator(".account-model-status")
+      .first()
+      .getByRole("button", { name: "查看 / 测试", exact: true })
+      .click();
+    assert.equal(
+      await page.getByRole("textbox", { name: "搜索模型" }).inputValue(),
+      "glm-5.3",
+    );
+    assert.equal((await overviewJob()).startedAt, selectionJob);
+    await page.getByRole("button", { name: "账号总览", exact: true }).click();
+    await page.reload();
+    await page.locator(".account-row").first().waitFor();
+    assert.equal(await selector.inputValue(), "glm-5.3");
+    assert.equal((await overviewJob()).startedAt, selectionJob);
+    await page
+      .getByRole("button", { name: "测试所选模型", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "停止主页模型测试", exact: true })
+      .click();
+    await finishOverview();
+    assert.equal((await overviewJob()).canceled, true);
+    await page
+      .getByRole("button", { name: "测试所选模型", exact: true })
+      .click();
+    await finishOverview();
+    assert.equal((await overviewJob()).completed, 3);
+    const unavailable = await page.evaluate(() => window.hub.load());
+    unavailable.accounts[1].models = unavailable.accounts[1].models.filter(
+      (m) => !["glm-5.3", "kimi-k3-1"].includes(m.id),
+    );
+    unavailable.accounts[2].models.find((m) => m.id === "kimi-k3-1").canTest =
+      false;
+    await app.evaluate(({ BrowserWindow }, state) => {
+      BrowserWindow.getAllWindows()[0].webContents.send("hub:state", state);
+    }, unavailable);
+    await page
+      .locator('.account-model-status[data-account="demo-account-1"]')
+      .getByText("未提供此模型", { exact: true })
+      .waitFor();
+    await selector.selectOption("kimi-k3-1");
+    await finishOverview();
+    assert.equal(
+      (await overviewJob()).total,
+      1,
+      "Skip accounts without the chosen model or test permission",
+    );
+    await selector.selectOption("deepseek-v4.1-flash");
+    await finishOverview();
     const fourState = await page.evaluate(() => window.hub.load());
     fourState.accounts.push({
       ...structuredClone(fourState.accounts[0]),
@@ -494,7 +597,7 @@ const fs = require("node:fs"),
       false,
     );
     assert.equal(await page.locator(".today-usage").count(), 4);
-    assert.equal(await page.locator(".account-deepseek").count(), 4);
+    assert.equal(await page.locator(".account-model-status").count(), 4);
     assert.equal(
       await page.evaluate(
         () =>
@@ -506,11 +609,27 @@ const fs = require("node:fs"),
       "All four accounts must fit without scrolling",
     );
     for (const fits of await page
-      .locator(".account-deepseek")
+      .locator(".account-model-status")
       .evaluateAll((rows) =>
         rows.map((row) => row.scrollWidth <= row.clientWidth),
       ))
-      assert.equal(fits, true, "DeepSeek status overflows the account row");
+      assert.equal(fits, true, "Model status overflows the account row");
+    const controls = await page
+      .locator(".overview-model-controls")
+      .evaluate((el) => ({
+        fits: el.scrollWidth <= el.clientWidth,
+        selector: el.querySelector("select").getBoundingClientRect().right,
+        button: el.querySelector("button").getBoundingClientRect().left,
+      }));
+    assert.equal(
+      controls.fits,
+      true,
+      "Model controls overflow at the smallest window size",
+    );
+    assert.ok(
+      controls.selector <= controls.button,
+      "Selector and test button must not overlap",
+    );
     for (const value of await page.locator(".row-main").evaluateAll((rows) =>
       rows.map((row) => {
         const columns = [...row.children].filter(
