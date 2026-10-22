@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>WorkBuddy Switch</title>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="70">
+    <path d="M82 174H386L318 106M386 174L318 242" stroke="#2864C7"/>
+    <path d="M430 338H126L194 270M126 338L194 406" stroke="#55AAA2"/>
+  </g>
+  <circle cx="82" cy="174" r="36" fill="#55AAA2"/>
+  <circle cx="430" cy="338" r="36" fill="#2864C7"/>
+</svg>

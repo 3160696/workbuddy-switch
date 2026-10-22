@@ -1,0 +1,95 @@
+{
+  "name": "workbuddy-switch",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Switch WorkBuddy and CodeBuddy CN accounts, inspect official credits and protect local conversations.",
+  "main": "electron/main.cjs",
+  "author": "3160696",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "package": "npm run build && node scripts/package-local.cjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "format": "prettier --write src electron test scripts *.mjs *.json *.html",
+    "smoke": "node scripts/smoke.cjs",
+    "screenshots": "node scripts/screenshots.cjs",
+    "privacy": "node scripts/check-public.cjs",
+    "release": "npm run build && electron-builder --win nsis zip --x64 --publish never"
+  },
+  "build": {
+    "appId": "io.github.3160696.workbuddyswitch",
+    "productName": "WorkBuddy Switch",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "electron/icon.ico",
+      "signExecutable": false
+    },
+    "asar": true,
+    "artifactName": "WorkBuddy-Switch-${version}-${arch}.${ext}",
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WorkBuddy Switch",
+      "uninstallDisplayName": "WorkBuddy Switch",
+      "installerIcon": "electron/icon.ico",
+      "uninstallerIcon": "electron/icon.ico",
+      "artifactName": "WorkBuddy-Switch-Setup-${version}-${arch}.exe"
+    },
+    "extraResources": [
+      {
+        "from": "scripts/codebuddy-process.ps1",
+        "to": "codebuddy-process.ps1"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE.WorkBuddy-Switch.txt"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "scripts/workbuddy-process.ps1",
+        "to": "workbuddy-process.ps1"
+      }
+    ]
+  },
+  "devDependencies": {
+    "@fluentui/react-components": "^9.74.10",
+    "@phosphor-icons/react": "^2.1.10",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
+    "playwright": "^1.64.1",
+    "prettier": "^3.9.10",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sharp": "^0.35.5",
+    "vite": "^8.3.4"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/3160696/workbuddy-switch.git"
+  },
+  "homepage": "https://github.com/3160696/workbuddy-switch#readme",
+  "bugs": {
+    "url": "https://github.com/3160696/workbuddy-switch/issues"
+  }
+}

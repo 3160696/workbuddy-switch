@@ -1,0 +1,11 @@
+{
+  "source": "DemoBackend",
+  "realAccountsRead": false,
+  "images": [
+    "overview.png",
+    "credits.png",
+    "models.png",
+    "backups.png",
+    "compact.png"
+  ]
+}
