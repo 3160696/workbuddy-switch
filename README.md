@@ -3,6 +3,10 @@
 <p align="center">管理 WorkBuddy 与 CodeBuddy CN 账号，查看积分、账单与模型解锁时间。</p>
 <p align="center"><a href="https://github.com/3160696/workbuddy-switch/releases/latest">下载 Windows 版</a> · <a href="使用说明.md">使用说明</a> · <a href="#开发">开发</a></p>
 
+当前稳定版：**[v1.1.1](https://github.com/3160696/workbuddy-switch/releases/tag/v1.1.1)** · [对应源码](https://github.com/3160696/workbuddy-switch/tree/v1.1.1) · [更新日志](更新日志.md)
+
+主页模型列现可直接选模型、点「测试」，结果在各账号原位置显示。操作方式见[模型选择与测试](使用说明.md#主页模型选择与测试)。
+
 ![账号总览，全部为演示数据](docs/images/overview.png)
 
 ## 功能
@@ -45,7 +49,7 @@ WorkBuddy 切换会备份登录与数据库，并将当前账号的本地对话�
 - 账号快照、账单缓存与备份保存在用户目录的 `.workbuddy-switch`，请在设置页打开备份目录。导出的账号 JSON 和备份可能包含完整登录凭据，请勿公开。
 - 同机加密快照依赖对应官方客户端及 Windows 用户，不能直接当成跨设备通用登录文件。失效账号需在官方客户端重新登录。
 
-更多操作见 [使用说明](使用说明.md)。
+更多操作见 [使用说明](使用说明.md)，版本变化见 [更新日志](更新日志.md)。
 
 ## 开发
 
